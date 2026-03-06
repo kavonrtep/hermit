@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# henv - List all available tools and environments
+
+echo "===== Environment Inventory ====="
+echo ""
+
+# --- Baked-in biotools ---
+echo "## Baked-in biotools"
+for tool in samtools bcftools bedtools bwa minimap2 fastqc multiqc trimmomatic; do
+    if path=$(command -v "$tool" 2>/dev/null); then
+        ver=$("$tool" --version 2>&1 | head -1) || ver="(version unknown)"
+        printf "  %-15s %s  [%s]\n" "$tool" "$ver" "$path"
+    fi
+done
+echo ""
+
+# --- Baked-in pydata ---
+echo "## Baked-in Python packages"
+for pkg in pandas numpy scipy scikit-learn matplotlib seaborn plotly biopython pysam cyvcf2; do
+    ver=$(python3 -c "import importlib.metadata; print(importlib.metadata.version('$pkg'))" 2>/dev/null) || ver=""
+    if [[ -n "$ver" ]]; then
+        printf "  %-15s %s\n" "$pkg" "$ver"
+    fi
+done
+echo ""
+
+# --- Runtime conda envs ---
+echo "## Runtime conda environments (/envs/conda/envs/)"
+if [[ -d /envs/conda/envs ]]; then
+    for env_dir in /envs/conda/envs/*/; do
+        [[ -d "$env_dir" ]] || continue
+        env_name=$(basename "$env_dir")
+        bin_count=0
+        [[ -d "${env_dir}bin" ]] && bin_count=$(find "${env_dir}bin" -maxdepth 1 -executable -type f 2>/dev/null | wc -l)
+        printf "  %-20s %d binaries\n" "$env_name" "$bin_count"
+    done
+else
+    echo "  (none)"
+fi
+echo ""
+
+# --- Runtime pip packages ---
+echo "## Runtime pip packages (/envs/pip/)"
+if [[ -d /envs/pip ]]; then
+    local_pkgs=$(find /envs/pip -maxdepth 1 -name "*.dist-info" -type d 2>/dev/null | wc -l)
+    if [[ "$local_pkgs" -gt 0 ]]; then
+        for dist in /envs/pip/*.dist-info; do
+            [[ -d "$dist" ]] || continue
+            pkg_name=$(basename "$dist" | sed 's/-[0-9].*//')
+            pkg_ver=$(basename "$dist" | sed 's/^[^-]*-//; s/\.dist-info$//')
+            printf "  %-20s %s\n" "$pkg_name" "$pkg_ver"
+        done
+    else
+        echo "  (none)"
+    fi
+else
+    echo "  (none)"
+fi
+echo ""
+
+# --- Compiled tools ---
+echo "## Compiled tools (/envs/local/bin/)"
+if [[ -d /envs/local/bin ]]; then
+    local_count=$(find /envs/local/bin -maxdepth 1 -executable -type f 2>/dev/null | wc -l)
+    symlink_count=$(find /envs/local/bin -maxdepth 1 -type l 2>/dev/null | wc -l)
+    if [[ $((local_count + symlink_count)) -gt 0 ]]; then
+        for bin in /envs/local/bin/*; do
+            [[ -e "$bin" ]] || continue
+            bname=$(basename "$bin")
+            if [[ -L "$bin" ]]; then
+                target=$(readlink "$bin")
+                printf "  %-20s → %s\n" "$bname" "$target"
+            else
+                printf "  %-20s (compiled)\n" "$bname"
+            fi
+        done
+    else
+        echo "  (none)"
+    fi
+else
+    echo "  (none)"
+fi
+echo ""
+
+# --- Install log summary ---
+echo "## Install log (/envs/installed.log)"
+if [[ -f /envs/installed.log ]]; then
+    total=$(wc -l < /envs/installed.log)
+    ok=$(grep -c "| OK" /envs/installed.log 2>/dev/null || echo 0)
+    failed=$(grep -c "| FAILED" /envs/installed.log 2>/dev/null || echo 0)
+    echo "  Total entries: $total (OK: $ok, FAILED: $failed)"
+    echo "  Last 5 entries:"
+    tail -5 /envs/installed.log | sed 's/^/    /'
+else
+    echo "  (no log yet)"
+fi

@@ -1,0 +1,155 @@
+Bootstrap: docker
+From: condaforge/mambaforge:latest
+
+%labels
+    Author bioinfo-agent
+    Description Sandboxed AI data analyst environment for bioinformatics
+    Version 4.0
+
+%environment
+    # Runtime environment is injected via --cleanenv + --env-file by run_agent.sh.
+    # This section only provides minimal fallback defaults for direct container use
+    # (e.g., singularity exec bioinfo-agent.sif samtools --version).
+    export PATH=/envs/npm_global/bin:/envs/local/bin:/opt/node/bin:/opt/envs/biotools/bin:/opt/envs/pydata/bin:/envs/pip/bin:/opt/conda/bin:/usr/local/bin:/usr/bin:/bin
+    export SCREENDIR=/envs/screens
+
+%post
+    # =========================================================================
+    # Prevent interactive prompts during build
+    # =========================================================================
+    export DEBIAN_FRONTEND=noninteractive
+    ln -fs /usr/share/zoneinfo/Europe/Prague /etc/localtime
+    echo "Europe/Prague" > /etc/timezone
+
+    # =========================================================================
+    # System packages
+    # =========================================================================
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        autoconf \
+        automake \
+        libtool \
+        pkg-config \
+        zlib1g-dev \
+        libbz2-dev \
+        liblzma-dev \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libncurses5-dev \
+        curl \
+        git \
+        wget \
+        unzip \
+        screen \
+        vim \
+        less \
+        tree \
+        inotify-tools \
+        jq \
+        procps \
+        && rm -rf /var/lib/apt/lists/*
+
+    # =========================================================================
+    # Node.js (baked in — stable dependency for AI agents)
+    # Downloaded as standalone binary to /opt/node, avoids apt/nodesource issues.
+    # =========================================================================
+    NODE_VERSION=22.17.0
+    ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" \
+        | tar -xJ -C /opt
+    mv /opt/node-v${NODE_VERSION}-linux-${ARCH} /opt/node
+    export PATH=/opt/node/bin:$PATH
+    node --version
+    npm --version
+
+    # =========================================================================
+    # ENV 1: biotools — CLI bioinformatics tools (C/C++ binaries)
+    # Baked into /opt/envs/ inside the image. Always available.
+    # =========================================================================
+    mamba create -y -p /opt/envs/biotools -c bioconda -c conda-forge \
+        samtools \
+        bcftools \
+        bedtools \
+        htslib \
+        fastqc \
+        multiqc \
+        trimmomatic \
+        bwa \
+        minimap2 \
+        && mamba clean -afy
+
+    # =========================================================================
+    # ENV 2: pydata — Python data science + bioinformatics libraries
+    # Baked into /opt/envs/ inside the image. Always available.
+    # =========================================================================
+    mamba create -y -p /opt/envs/pydata -c bioconda -c conda-forge \
+        python=3.12 \
+        pandas \
+        numpy \
+        scipy \
+        scikit-learn \
+        matplotlib \
+        seaborn \
+        plotly \
+        biopython \
+        pysam \
+        cyvcf2 \
+        jupyterlab \
+        ipython \
+        && mamba clean -afy
+
+    # =========================================================================
+    # R + Bioconductor: NOT baked in.
+    # Agent installs on demand into /envs/conda/envs/rstats (persistent).
+    # This avoids dependency conflicts and keeps the image smaller.
+    #
+    # To install at runtime:
+    #   mamba create -p /envs/conda/envs/rstats -c conda-forge -c bioconda \
+    #       r-base r-tidyverse r-ggplot2 r-data.table \
+    #       bioconductor-deseq2 bioconductor-edger \
+    #       bioconductor-biostrings bioconductor-genomicranges
+    # =========================================================================
+
+    # =========================================================================
+    # Create mount points and screen directory
+    # =========================================================================
+    mkdir -p /envs
+
+%runscript
+    echo "=================================================="
+    echo "  Bioinfo Agent Container v4.0"
+    echo "  Supports: Claude Code | Codex CLI"
+    echo "=================================================="
+    echo ""
+    echo "Paths are mounted at their original host locations."
+    echo "Input dirs are read-only; output dir is writable."
+    echo ""
+    echo "Baked-in environments:"
+    echo "  biotools  - samtools, bcftools, bedtools, bwa, minimap2, ..."
+    echo "  pydata    - pandas, numpy, scipy, matplotlib, pysam, ..."
+    echo ""
+    echo "Multi-agent: use 'screen' to run multiple agents concurrently."
+    echo ""
+    exec /bin/bash "$@"
+
+%help
+    Sandboxed bioinformatics data analyst environment for AI coding agents.
+
+    All data paths are mounted at their original host locations (same inside
+    and outside the container). Input is read-only; output is writable.
+
+    Baked-in environments (immutable, inside image):
+      biotools  — samtools, bcftools, bedtools, bwa, minimap2, fastqc, multiqc
+      pydata    — pandas, numpy, scipy, scikit-learn, matplotlib, pysam, cyvcf2
+
+    Runtime environments (persistent in /envs, agent-managed):
+      rstats    — R, tidyverse, DESeq2, edgeR (created on first use)
+      (custom)  — agent creates as needed
+
+    Quick start:
+      1. Build:     sudo singularity build bioinfo-agent.sif bioinfo-agent.def
+      2. Setup:     ./run_agent.sh --setup
+      3. Auth:      ./run_agent.sh --auth claude
+      4. Run:       ./run_agent.sh start && ./run_agent.sh claude
+      5. Headless:  ./run_agent.sh claude --task "Analyze the BAM files..."

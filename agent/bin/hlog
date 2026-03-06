@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# hlog - Log analysis steps to METHODS.md
+# Usage: hlog "description" ["command"]
+
+if [[ -z "${DATA_OUTPUT_DIR:-}" ]]; then
+    echo "Error: DATA_OUTPUT_DIR is not set. Cannot write METHODS.md." >&2
+    exit 1
+fi
+
+if [[ $# -eq 0 ]]; then
+    cat <<'EOF'
+hlog - Log analysis steps to METHODS.md
+
+Usage:
+  hlog "description"              Log a step
+  hlog "description" "command"    Log a step with command
+
+Writes to: $DATA_OUTPUT_DIR/METHODS.md
+EOF
+    exit 0
+fi
+
+METHODS_FILE="${DATA_OUTPUT_DIR}/METHODS.md"
+DESCRIPTION="$1"
+COMMAND="${2:-}"
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
+
+# Create file with header if it doesn't exist
+if [[ ! -f "$METHODS_FILE" ]]; then
+    mkdir -p "$(dirname "$METHODS_FILE")"
+    cat > "$METHODS_FILE" <<EOF
+# Methods
+
+Analysis steps logged automatically by \`hlog\`.
+
+---
+
+EOF
+fi
+
+# Append entry
+{
+    echo "### ${TIMESTAMP}"
+    echo ""
+    echo "${DESCRIPTION}"
+    echo ""
+    if [[ -n "$COMMAND" ]]; then
+        echo '```bash'
+        echo "${COMMAND}"
+        echo '```'
+        echo ""
+    fi
+} >> "$METHODS_FILE"
+
+echo "Logged to ${METHODS_FILE}"

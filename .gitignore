@@ -1,0 +1,13 @@
+# Built container image (large binary)
+*.sif
+
+# Runtime directories (auto-created, can be large)
+envs/
+workspace/
+config/
+
+# Environment config (contains local paths, possibly API keys)
+.env
+
+# IDE
+.idea/

@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# htool - Tool discovery and installation for hermit container
+# Usage:
+#   htool <name>            Search all envs, install if not found
+#   htool search <name>     Search only (no install)
+#   htool list              Show install log
+#   htool --env NAME <name> Install to specific conda env
+
+INSTALL_LOG="/envs/installed.log"
+LOCAL_BIN="/envs/local/bin"
+
+# Symlink skip list — never symlink these from conda envs
+SKIP_SYMLINKS="python python3 pip pip3 conda mamba"
+
+log_entry() {
+    local status="$1" name="$2" method="$3" detail="$4"
+    local ts
+    ts=$(date -u +"%Y-%m-%dT%H:%M:%S")
+    echo "${ts} | ${status} | ${name} | ${method} | ${detail}" >> "$INSTALL_LOG"
+}
+
+search_tool() {
+    local name="$1"
+    local found=""
+
+    # 1. Check PATH (baked-in, local/bin, pip/bin, etc.)
+    local path_hit
+    if path_hit=$(command -v "$name" 2>/dev/null); then
+        echo "FOUND on PATH: $path_hit"
+        found="$path_hit"
+        return 0
+    fi
+
+    # 2. Scan conda envs not on PATH
+    for bin in /envs/conda/envs/*/bin/"$name"; do
+        if [[ -x "$bin" ]]; then
+            echo "FOUND in conda env: $bin"
+            found="$bin"
+            return 0
+        fi
+    done
+
+    # 3. Check as Python module
+    if python3 -c "import $name" 2>/dev/null; then
+        echo "FOUND as Python module: $name"
+        found="python-module"
+        return 0
+    fi
+
+    echo "NOT FOUND: $name"
+    return 1
+}
+
+symlink_env_binaries() {
+    local env_path="$1"
+    local bin_dir="${env_path}/bin"
+    [[ -d "$bin_dir" ]] || return 0
+
+    mkdir -p "$LOCAL_BIN"
+    for bin in "$bin_dir"/*; do
+        [[ -x "$bin" ]] || continue
+        local bname
+        bname=$(basename "$bin")
+        # Skip common interpreters/managers
+        local skip=false
+        for s in $SKIP_SYMLINKS; do
+            [[ "$bname" == "$s" ]] && { skip=true; break; }
+        done
+        $skip && continue
+        # Don't overwrite existing
+        [[ -e "${LOCAL_BIN}/${bname}" ]] && continue
+        ln -s "$bin" "${LOCAL_BIN}/${bname}"
+    done
+}
+
+install_tool() {
+    local name="$1"
+    local target_env="$2"  # empty = auto (create env named after tool)
+
+    local env_name="${target_env:-$name}"
+    local env_path="/envs/conda/envs/${env_name}"
+
+    echo "--- Attempting conda install: $name → $env_path ---"
+    if mamba create -y -p "$env_path" -c bioconda -c conda-forge "$name" 2>&1; then
+        symlink_env_binaries "$env_path"
+        log_entry "OK" "$name" "conda" "$env_path"
+        echo "SUCCESS: $name installed via conda to $env_path"
+        echo "Binaries symlinked to $LOCAL_BIN"
+        return 0
+    fi
+
+    echo "--- Conda failed. Attempting pip install: $name ---"
+    if pip install "$name" 2>&1; then
+        log_entry "OK" "$name" "pip" "/envs/pip"
+        echo "SUCCESS: $name installed via pip to /envs/pip"
+        return 0
+    fi
+
+    log_entry "FAILED" "$name" "conda,pip" "solver/package not found"
+    echo ""
+    echo "FAILED: Could not install '$name' via conda or pip."
+    echo ""
+    echo "Manual options:"
+    echo "  1. Search with different name: htool search <alternate-name>"
+    echo "  2. Multi-package env: mamba create -y -p /envs/conda/envs/NAME -c bioconda -c conda-forge PKG1 PKG2"
+    echo "  3. Compile from source: ./configure --prefix=/envs/local && make -j\$AGENT_CPUS && make install"
+    return 1
+}
+
+# --- Argument parsing --------------------------------------------------------
+TARGET_ENV=""
+ACTION="auto"  # auto = search+install, search = search-only
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        search)
+            ACTION="search"; shift ;;
+        list)
+            if [[ -f "$INSTALL_LOG" ]]; then
+                cat "$INSTALL_LOG"
+            else
+                echo "(no installations logged yet)"
+            fi
+            exit 0
+            ;;
+        --env)
+            TARGET_ENV="$2"; shift 2 ;;
+        -h|--help)
+            cat <<'EOF'
+htool - Tool discovery and installation
+
+Usage:
+  htool <name>            Search all envs, install if not found
+  htool search <name>     Search only (no install)
+  htool list              Show install log
+  htool --env NAME <name> Install to specific conda env
+
+Search order:
+  1. PATH (baked-in + /envs/local/bin + /envs/pip/bin)
+  2. Conda envs (/envs/conda/envs/*/bin/)
+  3. Python modules (import check)
+
+Install cascade:
+  1. mamba create (bioconda + conda-forge)
+  2. pip install (fallback)
+  3. Manual instructions (if both fail)
+EOF
+            exit 0
+            ;;
+        *)
+            break ;;
+    esac
+done
+
+if [[ $# -eq 0 ]]; then
+    echo "Error: tool name required. Run 'htool --help' for usage."
+    exit 1
+fi
+
+TOOL_NAME="$1"
+
+# Search
+if search_tool "$TOOL_NAME"; then
+    log_entry "OK" "$TOOL_NAME" "existing" "$(command -v "$TOOL_NAME" 2>/dev/null || echo "found")"
+    exit 0
+fi
+
+# Search-only mode stops here
+if [[ "$ACTION" == "search" ]]; then
+    exit 1
+fi
+
+# Install
+install_tool "$TOOL_NAME" "$TARGET_ENV"

@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# hsummary - Generate SUMMARY.md for the current analysis
+
+if [[ -z "${DATA_OUTPUT_DIR:-}" ]]; then
+    echo "Error: DATA_OUTPUT_DIR is not set. Cannot write SUMMARY.md." >&2
+    exit 1
+fi
+
+SUMMARY_FILE="${DATA_OUTPUT_DIR}/SUMMARY.md"
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
+
+mkdir -p "$(dirname "$SUMMARY_FILE")"
+
+{
+    echo "# Analysis Summary"
+    echo ""
+    echo "Generated: ${TIMESTAMP}"
+    echo ""
+
+    # --- Output file manifest ---
+    echo "## Output Files"
+    echo ""
+    echo '```'
+    if [[ -d "$DATA_OUTPUT_DIR" ]]; then
+        find "$DATA_OUTPUT_DIR" -maxdepth 2 -type f -printf "%s\t%p\n" 2>/dev/null | \
+            awk '{
+                size=$1; path=$2;
+                if (size >= 1073741824) printf "%7.1f GB  %s\n", size/1073741824, path;
+                else if (size >= 1048576) printf "%7.1f MB  %s\n", size/1048576, path;
+                else if (size >= 1024) printf "%7.1f KB  %s\n", size/1024, path;
+                else printf "%7d B   %s\n", size, path;
+            }' | sort -t'/' -k2
+    fi
+    echo '```'
+    echo ""
+
+    # --- Methods link ---
+    if [[ -f "${DATA_OUTPUT_DIR}/METHODS.md" ]]; then
+        echo "## Methods"
+        echo ""
+        echo "See [METHODS.md](METHODS.md) for detailed analysis steps."
+        echo ""
+    fi
+
+    # --- Software versions ---
+    echo "## Software Versions"
+    echo ""
+    echo "### Key baked-in tools"
+    echo '```'
+    for tool in samtools bcftools bedtools bwa minimap2; do
+        if command -v "$tool" &>/dev/null; then
+            ver=$("$tool" --version 2>&1 | head -1) || ver="unknown"
+            printf "%-15s %s\n" "$tool" "$ver"
+        fi
+    done
+    echo '```'
+    echo ""
+
+    if [[ -f /envs/installed.log ]]; then
+        echo "### Runtime-installed tools"
+        echo '```'
+        grep "| OK" /envs/installed.log 2>/dev/null | tail -20 || echo "(none)"
+        echo '```'
+        echo ""
+    fi
+
+    # --- Environment info ---
+    echo "## Environment"
+    echo ""
+    echo "| Parameter | Value |"
+    echo "|-----------|-------|"
+    echo "| CPUs | ${AGENT_CPUS:-unknown} |"
+    echo "| Memory | ${AGENT_MEMORY:-unknown} GB |"
+    echo "| Input | ${DATA_INPUT_DIRS:-not set} |"
+    echo "| Output | ${DATA_OUTPUT_DIR:-not set} |"
+    echo "| Refs | ${DATA_REFS_DIR:-not mounted} |"
+    echo ""
+
+} > "$SUMMARY_FILE"
+
+echo "Summary written to ${SUMMARY_FILE}"
