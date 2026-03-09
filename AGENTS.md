@@ -69,9 +69,11 @@ Input and output directories are on the **same physical drive**.
 
 All installs are logged to `/envs/installed.log`.
 
-### Installing software
+### Do not use conda/pip install directly
 
-Always use `htool <name>` — it searches first and avoids duplicates.
+Bare `conda install`, `mamba install`, and `pip install` are **blocked by
+shell-level guards**. Always use `htool <name>` instead — it searches first
+and avoids duplicates.
 
 **Exception:** For multi-package environments, use `mamba create -p` directly:
 ```bash

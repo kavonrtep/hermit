@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Guard wrapper for pip3 — blocks bare 'pip3 install', passes everything else
+
+# Find real pip3 binary (skip /opt/hermit/bin to avoid recursion)
+real=$(PATH="${PATH/\/opt\/hermit\/bin:/}" command -v pip3 2>/dev/null)
+[[ -z "$real" ]] && { echo "Error: pip3 not found on PATH" >&2; exit 127; }
+
+# htool sets this to bypass the guard
+[[ "${_HTOOL_BYPASS:-}" == "1" ]] && exec "$real" "$@"
+
+# Block 'pip3 install'
+if [[ "${1:-}" == "install" ]]; then
+    echo "BLOCKED: bare 'pip3 install' is not allowed." >&2
+    echo "" >&2
+    echo "Use 'htool <package>' instead — it searches all environments first," >&2
+    echo "then installs to an isolated conda env with proper logging." >&2
+    exit 1
+fi
+
+exec "$real" "$@"

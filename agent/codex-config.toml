@@ -1,0 +1,6 @@
+# Codex CLI project config for hermit bioinformatics container
+# Mounted into workspace/.codex/config.toml at runtime
+# Reference: https://developers.openai.com/codex/config-reference
+
+# Recognize CLAUDE.md as fallback if AGENTS.md is missing
+project_doc_fallback_filenames = ["CLAUDE.md"]

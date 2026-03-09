@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# codex-wrapper — wraps Codex CLI with session tracking and notebook generation
+#
+# Provides equivalents for Claude Code's hooks that Codex CLI lacks:
+#   - Stop hook  → trap EXIT generates NOTEBOOK.md on session end
+#   - Install guard → handled by shell-level wrappers (conda/pip/mamba)
+#
+# Note: Codex CLI has no PostToolUse hook equivalent, so per-command logging
+# is not available. The notebook will include METHODS.md entries (from hlog),
+# output file listing, and software versions.
+
+# Find real codex binary (skip /opt/hermit/bin to avoid recursion)
+REAL_CODEX=$(PATH="${PATH/\/opt\/hermit\/bin:/}" command -v codex 2>/dev/null)
+if [[ -z "$REAL_CODEX" ]]; then
+    echo "Error: codex not found. Run './run_agent.sh --setup' first." >&2
+    exit 1
+fi
+
+# Record session start
+SESSION_START=$(date -u +"%Y-%m-%dT%H:%M:%S")
+
+if [[ -n "${DATA_OUTPUT_DIR:-}" ]]; then
+    mkdir -p "$DATA_OUTPUT_DIR"
+    echo "$SESSION_START" > "${DATA_OUTPUT_DIR}/.session_start"
+fi
+
+# Generate notebook on exit (equivalent of Claude Code's Stop hook)
+cleanup() {
+    local exit_code=$?
+
+    if [[ -n "${DATA_OUTPUT_DIR:-}" ]] && [[ -f "${DATA_OUTPUT_DIR}/.session_start" ]]; then
+        /opt/hermit/hooks/generate-notebook-codex.sh "$SESSION_START" 2>/dev/null || true
+        rm -f "${DATA_OUTPUT_DIR}/.session_start"
+    fi
+
+    exit $exit_code
+}
+trap cleanup EXIT
+
+# Run codex with all original arguments
+exec "$REAL_CODEX" "$@"

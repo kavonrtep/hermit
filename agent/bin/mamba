@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Guard wrapper for mamba — blocks bare 'mamba install', passes everything else
+# Allows 'mamba create -p' (used by htool and for multi-package environments).
+
+# Find real mamba binary (skip /opt/hermit/bin to avoid recursion)
+real=$(PATH="${PATH/\/opt\/hermit\/bin:/}" command -v mamba 2>/dev/null)
+[[ -z "$real" ]] && { echo "Error: mamba not found on PATH" >&2; exit 127; }
+
+# htool sets this to bypass the guard
+[[ "${_HTOOL_BYPASS:-}" == "1" ]] && exec "$real" "$@"
+
+# Block 'mamba install' — allow create, activate, info, list, etc.
+if [[ "${1:-}" == "install" ]]; then
+    echo "BLOCKED: bare 'mamba install' is not allowed." >&2
+    echo "" >&2
+    echo "Use 'htool <package>' instead — it searches all environments first," >&2
+    echo "then installs to an isolated conda env with proper logging." >&2
+    echo "" >&2
+    echo "For multi-package environments, use:" >&2
+    echo "  mamba create -y -p /envs/conda/envs/NAME -c bioconda -c conda-forge PKG1 PKG2" >&2
+    exit 1
+fi
+
+exec "$real" "$@"

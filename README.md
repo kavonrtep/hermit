@@ -46,7 +46,7 @@ sudo singularity build bioinfo-agent.sif bioinfo-agent.def
 
 ```bash
 cp env.template .env
-vim .env
+nano .env
 ```
 
 Set your data paths. They are mounted at their **original host locations**

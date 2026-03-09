@@ -83,7 +83,7 @@ install_tool() {
     local env_path="/envs/conda/envs/${env_name}"
 
     echo "--- Attempting conda install: $name → $env_path ---"
-    if mamba create -y -p "$env_path" -c bioconda -c conda-forge "$name" 2>&1; then
+    if _HTOOL_BYPASS=1 mamba create -y -p "$env_path" -c bioconda -c conda-forge "$name" 2>&1; then
         symlink_env_binaries "$env_path"
         log_entry "OK" "$name" "conda" "$env_path"
         echo "SUCCESS: $name installed via conda to $env_path"
@@ -92,7 +92,7 @@ install_tool() {
     fi
 
     echo "--- Conda failed. Attempting pip install: $name ---"
-    if pip install "$name" 2>&1; then
+    if _HTOOL_BYPASS=1 pip install "$name" 2>&1; then
         log_entry "OK" "$name" "pip" "/envs/pip"
         echo "SUCCESS: $name installed via pip to /envs/pip"
         return 0

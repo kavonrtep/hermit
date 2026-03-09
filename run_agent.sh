@@ -224,7 +224,7 @@ check_data_paths() {
 
 ensure_dirs() {
     mkdir -p "$WORKSPACE_DIR" "$ENVS_DIR" "$CONFIG_DIR"
-    mkdir -p "${WORKSPACE_DIR}/.claude"
+    mkdir -p "${WORKSPACE_DIR}/.claude" "${WORKSPACE_DIR}/.codex"
     mkdir -p "${ENVS_DIR}/conda/envs" "${ENVS_DIR}/conda/pkgs" "${ENVS_DIR}/pip"
     mkdir -p "${ENVS_DIR}/local/bin" "${ENVS_DIR}/local/lib" "${ENVS_DIR}/local/include"
     mkdir -p "${ENVS_DIR}/npm_global"
@@ -286,6 +286,8 @@ build_binds() {
         binds+=",${agent_dir}/hooks:/opt/hermit/hooks:ro"
         [[ -f "${agent_dir}/settings.json" ]] && \
             binds+=",${agent_dir}/settings.json:${WORKSPACE_DIR}/.claude/settings.json:ro"
+        [[ -f "${agent_dir}/codex-config.toml" ]] && \
+            binds+=",${agent_dir}/codex-config.toml:${WORKSPACE_DIR}/.codex/config.toml:ro"
     fi
 
     echo "$binds"
@@ -553,7 +555,7 @@ do_interactive() {
             singularity exec --cleanenv --env-file "$env_file" \
                 --pwd "${WORKSPACE_DIR}" \
                 "instance://${INSTANCE_NAME}" \
-                codex --dangerously-bypass-approvals-and-sandbox
+                codex-wrapper --dangerously-bypass-approvals-and-sandbox
             ;;
         shell)
             echo "Attaching bash to instance '$INSTANCE_NAME'..."
@@ -618,7 +620,7 @@ ${TASK_PROMPT}"
             singularity exec --cleanenv --env-file "$env_file" \
                 --pwd "${WORKSPACE_DIR}" \
                 "instance://${INSTANCE_NAME}" \
-                codex --dangerously-bypass-approvals-and-sandbox \
+                codex-wrapper --dangerously-bypass-approvals-and-sandbox \
                 --quiet "$(printf '%s' "$FULL_PROMPT")" \
                 2>&1 | tee "$LOG_FILE"
             ;;
