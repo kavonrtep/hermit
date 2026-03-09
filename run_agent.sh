@@ -45,6 +45,21 @@ OPENAI_CONFIG_DIR="${OPENAI_CONFIG_DIR:-${CONFIG_DIR}/openai}"
 
 # --- End configuration -------------------------------------------------------
 
+print_banner() {
+    cat <<'BANNER'
+        ╭─────╮
+       ╱ A══T  ╲
+      │  T══A   │
+      │   G══C  │    𝗛 𝗘 𝗥 𝗠 𝗜 𝗧
+      │  C══G   │    bioinformatics in a shell
+      │   A══T  │
+       ╲  T══A ╱
+        ╰─────╯
+      ╭┘       └╮
+     ◉))       ((◉
+BANNER
+}
+
 print_help() {
     cat <<'EOF'
 Usage: run_agent.sh [OPTIONS] <COMMAND> [--task "prompt"]
@@ -664,6 +679,9 @@ CONTEXT
 }
 
 # --- Main --------------------------------------------------------------------
+print_banner
+echo ""
+
 case $MODE in
     start)       do_start ;;
     stop)        do_stop ;;

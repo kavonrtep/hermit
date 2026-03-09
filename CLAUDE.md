@@ -93,7 +93,8 @@ conda activate /envs/conda/envs/rstats
 3. **Plan before executing** — outline approach, estimate resource needs.
 4. **Work iteratively** — small subset first, verify, then scale up.
 5. **Clean up** — remove temporary files when done.
-6. **Document** — always produce `$DATA_OUTPUT_DIR/SUMMARY.md`.
+6. **Document** — use `hlog` to record analysis steps. A lab notebook
+   (`NOTEBOOK.md`) is generated automatically when the session ends.
 
 ## Communication Rules
 

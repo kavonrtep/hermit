@@ -1,3 +1,5 @@
+<img src="logo.png" width="300" alt="Hermit logo">
+
 # Hermit: Sandboxed AI Data Analyst for Bioinformatics
 
 Run **Claude Code** or **OpenAI Codex CLI** inside a Singularity/Apptainer
