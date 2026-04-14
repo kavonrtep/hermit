@@ -54,9 +54,9 @@ inside the container — paths in logs, scripts, and output match exactly.
 
 ```bash
 # .env
-INPUT_DIRS=/mnt/ceph/454_data,/mnt/ceph/shared_data
-OUTPUT_DIR=/mnt/ceph/users/petr/results
-REFS_DIR=/mnt/ceph/references
+INPUT_DIRS=/mnt/ceph/454_data,/mnt/ceph/shared_data   # read-only
+OUTPUT_DIR=/mnt/ceph/hermit/petr/hermit/workdir       # read-write access 
+REFS_DIR=/mnt/ceph/references  # optional read-only reference genomes
 ```
 
 **Tip:** Symlink workspace to local SSD for fast temp I/O:

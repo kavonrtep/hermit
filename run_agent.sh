@@ -453,8 +453,11 @@ do_setup() {
     ensure_dirs
     detect_resources
 
-    local binds="${ENVS_DIR}:/envs:rw"
     local fake_home="${ENVS_DIR}/home"
+    # Bind fake_home at its own path so HOME resolves inside the container.
+    # Without this, --home sets HOME to a nonexistent path and npm fails
+    # trying to mkdir '/home/petr' while creating its cache.
+    local binds="${ENVS_DIR}:/envs:rw,${fake_home}:${fake_home}:rw"
     write_env_file
 
     local env_file="${ENVS_DIR}/hermit.env"
