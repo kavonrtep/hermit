@@ -33,6 +33,11 @@ INPUT_DIRS="${INPUT_DIRS:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-}"
 REFS_DIR="${REFS_DIR:-}"
 
+# PROJECT_DIR (optional): a writable source tree for software development
+#   (e.g. a server checkout). Mounted read-write at its original host path.
+#   Distinct from data dirs — this is code you edit, not data you analyse.
+PROJECT_DIR="${PROJECT_DIR:-}"
+
 # INTERNAL PATHS (self-contained — travel with the project):
 WORKSPACE_DIR="${WORKSPACE_DIR:-${SCRIPT_DIR}/workspace}"
 ENVS_DIR="${ENVS_DIR:-${SCRIPT_DIR}/envs}"
@@ -84,6 +89,10 @@ OPTIONS:
   --cpus N          Limit CPU cores (default: auto-detect)
   --memory NG       Limit memory in GB (default: auto-detect)
   --no-refs         Skip mounting references
+  --dev             Development mode: lift the install guards for this run.
+                    Sets HERMIT_ALLOW_INSTALL=1 so bare pip/conda/mamba
+                    install (and htool) pass through. Use when developing
+                    software in the container rather than analysing data.
   --dry-run         Show the singularity command without executing
   -h, --help        Show this help
 
@@ -91,6 +100,7 @@ ENVIRONMENT VARIABLES (data paths — set in .env):
   INPUT_DIRS          Comma-separated read-only data dirs    [REQUIRED]
   OUTPUT_DIR          Writable results directory              [REQUIRED]
   REFS_DIR            Reference genomes (read-only)           [optional]
+  PROJECT_DIR         Writable source tree for development    [optional]
 
 ENVIRONMENT VARIABLES (internal — default to project subdirectories):
   WORKSPACE_DIR       Scratch/temp storage                    [./workspace]
@@ -139,6 +149,7 @@ MOUNT_REFS=true
 DRY_RUN=false
 USER_CPUS=""
 USER_MEMORY=""
+ALLOW_INSTALL=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -164,6 +175,8 @@ while [[ $# -gt 0 ]]; do
             USER_MEMORY="$2"; shift 2 ;;
         --no-refs)
             MOUNT_REFS=false; shift ;;
+        --dev)
+            ALLOW_INSTALL=true; shift ;;
         --dry-run)
             DRY_RUN=true; shift ;;
         -h|--help)
@@ -270,6 +283,11 @@ build_binds() {
         binds+=",${REFS_DIR}:${REFS_DIR}:ro"
     fi
 
+    # Project source tree — same path, WRITABLE (development use)
+    if [[ -n "${PROJECT_DIR:-}" ]] && [[ -d "$PROJECT_DIR" ]]; then
+        binds+=",${PROJECT_DIR}:${PROJECT_DIR}:rw"
+    fi
+
     # Agent credentials — mounted into the fake home
     binds+=",${CLAUDE_CONFIG_DIR}:${fake_home}/.claude:rw"
     binds+=",${CODEX_CONFIG_DIR}:${fake_home}/.codex:rw"
@@ -316,6 +334,11 @@ write_env_file() {
     echo "TERM=${TERM:-xterm-256color}"                   >> "$env_file"
     echo "LANG=C.UTF-8"                                   >> "$env_file"
     echo "LC_ALL=C.UTF-8"                                 >> "$env_file"
+
+    # Development mode: lift install guards (--dev). Both the Claude PreToolUse
+    # hook and the conda/pip/mamba shell wrappers honour this variable.
+    [[ "${ALLOW_INSTALL:-false}" == true ]] && \
+        echo "HERMIT_ALLOW_INSTALL=1"                     >> "$env_file"
 
     # API keys (only if set)
     [[ -n "${ANTHROPIC_API_KEY:-}" ]] && \
@@ -370,7 +393,11 @@ do_start() {
     echo "Config:     $(readlink -f "$CONFIG_DIR")"
     [[ "$MOUNT_REFS" == true ]] && [[ -n "${REFS_DIR:-}" ]] && [[ -d "$REFS_DIR" ]] && \
         echo "References: $REFS_DIR (READ-ONLY, same path inside)"
+    [[ -n "${PROJECT_DIR:-}" ]] && [[ -d "$PROJECT_DIR" ]] && \
+        echo "Project:    $PROJECT_DIR (WRITABLE, same path inside)"
     echo "Resources:  ${AGENT_CPUS} CPUs, ${AGENT_MEMORY} GB RAM"
+    [[ "${ALLOW_INSTALL:-false}" == true ]] && \
+        echo "Guards:     OFF — install guards lifted (--dev); installs are unrestricted"
     echo ""
 
     local env_file="${ENVS_DIR}/hermit.env"
@@ -542,6 +569,9 @@ do_interactive() {
     detect_resources
     write_env_file
     local env_file="${ENVS_DIR}/hermit.env"
+
+    [[ "${ALLOW_INSTALL:-false}" == true ]] && \
+        echo "Dev mode: install guards are OFF (HERMIT_ALLOW_INSTALL=1)."
 
     case ${AGENT:-shell} in
         claude)

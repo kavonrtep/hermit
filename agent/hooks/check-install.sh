@@ -3,6 +3,9 @@
 # Reads JSON from stdin, checks tool_input.command
 # Exit 0 = allow, Exit 2 = block
 
+# Development mode (run_agent.sh --dev): guards lifted, allow everything.
+[[ "${HERMIT_ALLOW_INSTALL:-}" == "1" ]] && exit 0
+
 # Read all stdin
 input=$(cat)
 

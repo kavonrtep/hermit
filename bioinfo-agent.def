@@ -97,6 +97,7 @@ From: condaforge/mambaforge:latest
         cyvcf2 \
         jupyterlab \
         ipython \
+        uv \
         && mamba clean -afy
 
     # =========================================================================

@@ -6,8 +6,8 @@
 real=$(PATH="${PATH/\/opt\/hermit\/bin:/}" command -v mamba 2>/dev/null)
 [[ -z "$real" ]] && { echo "Error: mamba not found on PATH" >&2; exit 127; }
 
-# htool sets this to bypass the guard
-[[ "${_HTOOL_BYPASS:-}" == "1" ]] && exec "$real" "$@"
+# htool sets this to bypass the guard; --dev mode lifts it globally
+[[ "${_HTOOL_BYPASS:-}" == "1" || "${HERMIT_ALLOW_INSTALL:-}" == "1" ]] && exec "$real" "$@"
 
 # Block 'mamba install' — allow create, activate, info, list, etc.
 if [[ "${1:-}" == "install" ]]; then
