@@ -100,6 +100,64 @@ Credentials are stored in `./config/` and travel with the project.
 
 ---
 
+## Development Mode (install bypass)
+
+By default, software installs are restricted to `htool` (bare `pip`,
+`conda`, and `mamba install` are blocked) to keep analysis environments
+reproducible. When you use the container to **develop software** rather
+than analyse data, this is too restrictive. The `--dev` flag lifts the
+guards for that session.
+
+### Configure a writable source tree (optional)
+
+Data dirs (`INPUT_DIRS`) stay read-only. For code you edit, set a separate
+writable mount in `.env`:
+
+```bash
+# .env
+PROJECT_DIR=/home/petr/PycharmProjects/my_server   # mounted read-write, same path
+```
+
+### Run with guards lifted
+
+Pass `--dev` on the command that **launches the agent or shell** — not just
+on `start`. Each attach regenerates the env file, so a plain `claude` after
+`start --dev` would put the guards back on.
+
+```bash
+./run_agent.sh claude --dev        # Claude, installs unrestricted
+./run_agent.sh shell --dev         # plain bash, installs unrestricted
+./run_agent.sh codex --dev
+```
+
+The banner shows `Guards: OFF`. Inside, `echo $HERMIT_ALLOW_INSTALL` → `1`.
+Now `uv`, `pip install`, and `conda/mamba install` all pass through:
+
+```bash
+cd /home/petr/PycharmProjects/my_server
+uv venv && uv sync                 # .venv stays in the project → persists on host
+uv add fastapi 'uvicorn[standard]' sqlalchemy alembic
+mamba create -p /envs/conda/envs/pg postgresql   # persists in /envs
+npm install -g @jbrowse/cli        # npm is never guarded
+```
+
+`uv` is baked into the image (rebuild required); until then, bootstrap it
+in `--dev` with `pip install uv`.
+
+### Notes
+
+- **`--setup` and `--auth` do not need `--dev`.** They only run `npm install
+  -g` (never guarded), so the flag has no effect there.
+- **`--dev` is per-attach but instance-wide.** Once any command sets it, the
+  running instance's env file carries it for all sessions. Stop and restart
+  the instance to flip the state cleanly.
+- **Docker stays out of the sandbox.** Singularity runs unprivileged with no
+  daemon — author `compose.yml`/Dockerfiles here, run `docker compose` on the
+  host. The in-container venv/conda envs are dev conveniences; the project's
+  pinned `pyproject.toml`/`uv.lock` and compose files are the source of truth.
+
+---
+
 ## Architecture
 
 ```
