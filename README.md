@@ -3,9 +3,9 @@
 
 <img src="logo.png" width="500" alt="Hermit logo">
 
-Run **Claude Code** or **OpenAI Codex CLI** inside a Singularity/Apptainer
-container with read-only data protection, resource-aware execution, and
-persistent software environments.
+Run Claude Code, OpenAI Codex CLI, GitHub Copilot CLI, or Google Antigravity
+CLI inside a Singularity/Apptainer container with read-only data protection,
+resource-aware execution, and persistent software environments.
 
 ## Why This Exists
 
@@ -75,6 +75,8 @@ chmod +x run_agent.sh
 
 ```bash
 ./run_agent.sh --auth claude    # Claude Code
+./run_agent.sh --auth copilot   # GitHub Copilot CLI
+./run_agent.sh --auth antigravity  # Google Antigravity CLI
 ./run_agent.sh --auth codex     # Codex CLI
 ```
 
@@ -86,6 +88,8 @@ Credentials are stored in `./config/` and travel with the project.
 # Start the persistent container instance
 ./run_agent.sh start
 
+./run_agent.sh copilot
+./run_agent.sh antigravity
 # Attach agents (each in a separate terminal)
 ./run_agent.sh claude
 ./run_agent.sh codex
@@ -295,6 +299,8 @@ sudo singularity build bioinfo-agent.sif bioinfo-agent.def
 ./run_agent.sh shell
 npm update -g @anthropic-ai/claude-code
 npm update -g @openai/codex
+npm update -g @github/copilot
+# Antigravity updates when ./run_agent.sh --setup is run again.
 
 # Rebuild image (rare)
 sudo singularity build --force bioinfo-agent.sif bioinfo-agent.def

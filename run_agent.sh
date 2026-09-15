@@ -5,12 +5,14 @@ set -euo pipefail
 # run_agent.sh - Launch AI coding agents in a sandboxed Singularity container
 #
 # Usage:
-#   ./run_agent.sh --setup                        # Install agents
+#   ./run_agent.sh --setup                        # Install agent CLIs
 #   ./run_agent.sh --auth claude                  # Authenticate
 #   ./run_agent.sh start                          # Start persistent instance
 #   ./run_agent.sh stop                           # Stop instance
 #   ./run_agent.sh claude                         # Attach Claude Code
 #   ./run_agent.sh codex                          # Attach Codex CLI
+#   ./run_agent.sh copilot                        # Attach GitHub Copilot CLI
+#   ./run_agent.sh antigravity                    # Attach Antigravity CLI
 #   ./run_agent.sh shell                          # Attach bash
 #   ./run_agent.sh claude --task "prompt"         # Autonomous task
 #   ./run_agent.sh status                         # Show instance status
@@ -47,6 +49,8 @@ CONFIG_DIR="${CONFIG_DIR:-${SCRIPT_DIR}/config}"
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-${CONFIG_DIR}/claude}"
 CODEX_CONFIG_DIR="${CODEX_CONFIG_DIR:-${CONFIG_DIR}/codex}"
 OPENAI_CONFIG_DIR="${OPENAI_CONFIG_DIR:-${CONFIG_DIR}/openai}"
+COPILOT_CONFIG_DIR="${COPILOT_CONFIG_DIR:-${CONFIG_DIR}/copilot}"
+ANTIGRAVITY_CONFIG_DIR="${ANTIGRAVITY_CONFIG_DIR:-${CONFIG_DIR}/antigravity}"
 
 # --- End configuration -------------------------------------------------------
 
@@ -77,10 +81,12 @@ INSTANCE COMMANDS:
 AGENT COMMANDS (instance must be running):
   claude            Attach interactive Claude Code session
   codex             Attach interactive Codex CLI session
+  copilot           Attach interactive GitHub Copilot CLI session
+  antigravity       Attach interactive Antigravity CLI session
   shell             Attach plain bash shell
 
 SETUP COMMANDS (no instance needed):
-  --setup           First-time setup: install Claude Code and Codex CLI
+  --setup           First-time setup: install available agent CLIs
   --auth AGENT      Authenticate an agent (opens browser)
 
 OPTIONS:
@@ -159,7 +165,7 @@ while [[ $# -gt 0 ]]; do
             MODE="stop"; shift ;;
         status)
             MODE="status"; shift ;;
-        claude|codex|shell)
+        claude|codex|copilot|antigravity|shell)
             MODE="interactive"; AGENT="$1"; shift ;;
         --setup)
             MODE="setup"; shift ;;
@@ -244,6 +250,7 @@ ensure_dirs() {
     mkdir -p "${ENVS_DIR}/screens" && chmod 700 "${ENVS_DIR}/screens"
     mkdir -p "${ENVS_DIR}/home"
     mkdir -p "$CLAUDE_CONFIG_DIR" "$CODEX_CONFIG_DIR" "$OPENAI_CONFIG_DIR"
+    mkdir -p "$COPILOT_CONFIG_DIR" "$ANTIGRAVITY_CONFIG_DIR"
     [[ -n "$OUTPUT_DIR" ]] && mkdir -p "$OUTPUT_DIR"
 }
 
@@ -292,6 +299,8 @@ build_binds() {
     binds+=",${CLAUDE_CONFIG_DIR}:${fake_home}/.claude:rw"
     binds+=",${CODEX_CONFIG_DIR}:${fake_home}/.codex:rw"
     binds+=",${OPENAI_CONFIG_DIR}:${fake_home}/.config/openai:rw"
+    binds+=",${COPILOT_CONFIG_DIR}:${fake_home}/.copilot:rw"
+    binds+=",${ANTIGRAVITY_CONFIG_DIR}:${fake_home}/.gemini:rw"
 
     # Agent context files — auto-mounted into workspace
     [[ -f "${SCRIPT_DIR}/CLAUDE.md" ]] && binds+=",${SCRIPT_DIR}/CLAUDE.md:${WORKSPACE_DIR}/CLAUDE.md:ro"
@@ -337,8 +346,18 @@ write_env_file() {
 
     # Development mode: lift install guards (--dev). Both the Claude PreToolUse
     # hook and the conda/pip/mamba shell wrappers honour this variable.
-    [[ "${ALLOW_INSTALL:-false}" == true ]] && \
+    #
+    # PIP_TARGET/PYTHONPATH pin pip to the persistent /envs/pip prefix, which is
+    # what analysis mode wants. In dev mode they break venv workflows:
+    # PIP_TARGET redirects installs made inside an active venv to /envs/pip, and
+    # PYTHONPATH precedes venv site-packages, so /envs/pip copies shadow them.
+    # Without them, pip installs into the active venv (or ~/.local if none).
+    if [[ "${ALLOW_INSTALL:-false}" == true ]]; then
         echo "HERMIT_ALLOW_INSTALL=1"                     >> "$env_file"
+    else
+        echo "PIP_TARGET=/envs/pip"                       >> "$env_file"
+        echo "PYTHONPATH=/envs/pip"                       >> "$env_file"
+    fi
 
     # API keys (only if set)
     [[ -n "${ANTHROPIC_API_KEY:-}" ]] && \
@@ -451,6 +470,8 @@ do_start() {
     echo "Next steps:"
     echo "  ./run_agent.sh claude          # Attach Claude Code"
     echo "  ./run_agent.sh codex           # Attach Codex CLI"
+    echo "  ./run_agent.sh copilot         # Attach GitHub Copilot CLI"
+    echo "  ./run_agent.sh antigravity     # Attach Antigravity CLI"
     echo "  ./run_agent.sh shell           # Attach bash (use screen inside)"
     echo "  ./run_agent.sh stop            # Stop instance"
 }
@@ -476,7 +497,7 @@ do_status() {
 }
 
 do_setup() {
-    echo "=== First-time setup: Claude Code + Codex CLI ==="
+    echo "=== First-time setup: agent CLIs ==="
     ensure_dirs
     detect_resources
 
@@ -507,6 +528,18 @@ do_setup() {
         echo "Codex CLI: $(codex --version 2>/dev/null || echo installed)"
 
         echo ""
+        echo "--- Installing GitHub Copilot CLI ---"
+        npm install -g @github/copilot
+        echo "GitHub Copilot CLI: $(copilot --version 2>/dev/null || echo installed)"
+
+        echo ""
+        echo "--- Installing Antigravity CLI ---"
+        curl -fsSL https://antigravity.google/cli/install.sh \
+            | bash -s -- --skip-aliases --skip-path
+        ln -sf "$HOME/.local/bin/agy" /envs/local/bin/agy
+        echo "Antigravity CLI: $(agy --version 2>/dev/null || echo installed)"
+
+        echo ""
         echo "--- Creating persistent directories ---"
         mkdir -p /envs/conda/envs /envs/conda/pkgs /envs/pip /envs/R_libs
         mkdir -p /envs/local/bin /envs/local/lib /envs/local/include
@@ -517,6 +550,8 @@ do_setup() {
         echo "  Next steps:"
         echo "    ./run_agent.sh --auth claude"
         echo "    ./run_agent.sh --auth codex"
+        echo "    ./run_agent.sh --auth copilot"
+        echo "    ./run_agent.sh --auth antigravity"
         echo "========================================="
     '
 }
@@ -535,6 +570,8 @@ do_auth() {
     binds+=",${CLAUDE_CONFIG_DIR}:${fake_home}/.claude:rw"
     binds+=",${CODEX_CONFIG_DIR}:${fake_home}/.codex:rw"
     binds+=",${OPENAI_CONFIG_DIR}:${fake_home}/.config/openai:rw"
+    binds+=",${COPILOT_CONFIG_DIR}:${fake_home}/.copilot:rw"
+    binds+=",${ANTIGRAVITY_CONFIG_DIR}:${fake_home}/.gemini:rw"
     write_env_file
     local env_file="${ENVS_DIR}/hermit.env"
 
