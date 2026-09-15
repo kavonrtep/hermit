@@ -588,8 +588,20 @@ do_auth() {
             echo ""
             singularity exec --cleanenv --env-file "$env_file" --no-home --home "$fake_home" --bind "$binds" "$SIF_IMAGE" codex
             ;;
+        copilot)
+            echo "Running: copilot login"
+            echo "Complete the device-code flow when prompted."
+            echo ""
+            singularity exec --cleanenv --env-file "$env_file" --no-home --home "$fake_home" --bind "$binds" "$SIF_IMAGE" copilot login
+            ;;
+        antigravity)
+            echo "Running: agy"
+            echo "Open the URL shown in the terminal and complete the sign-in flow."
+            echo ""
+            singularity exec --cleanenv --env-file "$env_file" --no-home --home "$fake_home" --bind "$binds" "$SIF_IMAGE" agy
+            ;;
         *)
-            echo "Unknown agent: $AGENT (use 'claude' or 'codex')"
+            echo "Unknown agent: $AGENT (use 'claude', 'codex', 'copilot', or 'antigravity')"
             exit 1
             ;;
     esac
@@ -626,6 +638,22 @@ do_interactive() {
                 --pwd "${WORKSPACE_DIR}" \
                 "instance://${INSTANCE_NAME}" \
                 codex-wrapper --dangerously-bypass-approvals-and-sandbox
+            ;;
+        copilot)
+            echo "Attaching GitHub Copilot CLI to instance '$INSTANCE_NAME'..."
+            echo "=================================================="
+            singularity exec --cleanenv --env-file "$env_file" \
+                --pwd "${WORKSPACE_DIR}" \
+                "instance://${INSTANCE_NAME}" \
+                copilot
+            ;;
+        antigravity)
+            echo "Attaching Antigravity CLI to instance '$INSTANCE_NAME'..."
+            echo "=================================================="
+            singularity exec --cleanenv --env-file "$env_file" \
+                --pwd "${WORKSPACE_DIR}" \
+                "instance://${INSTANCE_NAME}" \
+                agy
             ;;
         shell)
             echo "Attaching bash to instance '$INSTANCE_NAME'..."
